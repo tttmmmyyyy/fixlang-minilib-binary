@@ -1,3 +1,10 @@
+## 0.7.0
+### Changed
+- Merged PR#2 (thanks to tttmmmyyyy san).
+  - Migrate to the unboxed-Array standard library.
+  - fixproj.toml: Bumped `fix_version` to 1.5.0.
+- Upgraded to minilib-common@0.14.0.
+
 ## 0.6.4
 ### Added
 - Minilib.Encoding.Binary: Added `ByteBuffer::@size`.
