@@ -60,6 +60,24 @@ base64_decode = |str| (
     let (dest, dest_size, acc, filled) = loop(
         (dest, 0, 0, 0, 0), |(dest, src_idx, dest_size, acc, filled)|
         if src_idx == src_size { break $ (dest, dest_size, acc, filled) };
+        // The four characters of a whole group, taken at once. A group is read this way unless a
+        // piece is already waiting or the string ends inside it.
+        let four = if filled != 0 || src_idx + 4 > src_size { Option::none() } else {
+            let p0 = _u8_to_b64_table.@(src.@(src_idx).i64);
+            let p1 = _u8_to_b64_table.@(src.@(src_idx + 1).i64);
+            let p2 = _u8_to_b64_table.@(src.@(src_idx + 2).i64);
+            let p3 = _u8_to_b64_table.@(src.@(src_idx + 3).i64);
+            // A piece is at most 63, and a character standing for none is 0xFF.
+            if p0.bit_or(p1).bit_or(p2).bit_or(p3) >= 64_U8 { Option::none() };
+            Option::some $ (p0, p1, p2, p3)
+        };
+        if four.is_some {
+            let (p0, p1, p2, p3) = four.as_some;
+            let dest = dest.set(dest_size, p0.shift_left(2_U8).bit_or(p1.shift_right(4_U8)))
+                            .set(dest_size + 1, p1.shift_left(4_U8).bit_or(p2.shift_right(2_U8)))
+                            .set(dest_size + 2, p2.shift_left(6_U8).bit_or(p3));
+            continue $ (dest, src_idx + 4, dest_size + 3, 0, 0)
+        };
         let piece = _u8_to_b64_table.@(src.@(src_idx).i64);
         if piece == 0xFF_U8 { continue $ (dest, src_idx + 1, dest_size, acc, filled) };
         let acc = acc.shift_left(6).bit_or(piece.i64);
