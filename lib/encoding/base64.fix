@@ -8,62 +8,85 @@ import Minilib.Text.StringEx;
 base64_encode: Array U8 -> String;
 base64_encode = |src| (
     let src_size = src.@size;
-    let dest_size = (src_size + 2) / 3 * 4;
-    let dest = Array::fill(dest_size, 0_U8);
-    loop(
-        (dest, 0, 0), |(dest, src_idx, dest_idx)|
-        if src_idx >= src_size {
-            if dest_size != dest_idx { undefined("dest_size mismatch") };
-            break $ dest.StringEx::from_array
-        };
-        let has_b1 = (src_idx + 1 < src_size);
-        let has_b2 = (src_idx + 2 < src_size);
+    let dest = Array::fill((src_size + 2) / 3 * 4, 0_U8);
+    let groups = src_size / 3;
+    // Every three bytes are four characters, each standing for six bits of them.
+    let dest = loop(
+        (dest, 0), |(dest, group)|
+        if group == groups { break $ dest };
+        let src_idx = group * 3;
         let b0 = src.@(src_idx);
-        let b1 = if has_b1 { src.@(src_idx + 1) } else { 0_U8 };
-        let b2 = if has_b2 { src.@(src_idx + 2) } else { 0_U8 };
-        let u0 = _b64_to_u8_table.@(b0.shift_right(2_U8).i64);
-        let u1 = _b64_to_u8_table.@(b0.shift_left(4_U8).bit_or(b1.shift_right(4_U8)).bit_and(63_U8).i64);
-        let u2 = _b64_to_u8_table.@(b1.shift_left(2_U8).bit_or(b2.shift_right(6_U8)).bit_and(63_U8).i64);
-        let u3 = _b64_to_u8_table.@(b2.bit_and(63_U8).i64);
-        let dest = dest.set(dest_idx, u0)
-                        .set(dest_idx + 1, u1)
-                        .set(dest_idx + 2, if has_b1 { u2 } else { '=' })
-                        .set(dest_idx + 3, if has_b2 { u3 } else { '=' });
-        continue $ (dest, src_idx + 3, dest_idx + 4)
-    )
+        let b1 = src.@(src_idx + 1);
+        let b2 = src.@(src_idx + 2);
+        let dest_idx = group * 4;
+        let dest = dest.set(dest_idx, _b64_to_u8_table.@(b0.shift_right(2_U8).i64))
+                        .set(dest_idx + 1, _b64_to_u8_table.@(b0.shift_left(4_U8).bit_or(b1.shift_right(4_U8)).i64))
+                        .set(dest_idx + 2, _b64_to_u8_table.@(b1.shift_left(2_U8).bit_or(b2.shift_right(6_U8)).i64))
+                        .set(dest_idx + 3, _b64_to_u8_table.@(b2.i64));
+        continue $ (dest, group + 1)
+    );
+    // A last group of one or two bytes, which the padding character fills out to four characters.
+    let src_idx = groups * 3;
+    let dest_idx = groups * 4;
+    let rest = src_size - src_idx;
+    let dest = if rest == 0 { dest }
+    else if rest == 1 {
+        let b0 = src.@(src_idx);
+        dest.set(dest_idx, _b64_to_u8_table.@(b0.shift_right(2_U8).i64))
+            .set(dest_idx + 1, _b64_to_u8_table.@(b0.shift_left(4_U8).i64))
+            .set(dest_idx + 2, '=')
+            .set(dest_idx + 3, '=')
+    } else {
+        let b0 = src.@(src_idx);
+        let b1 = src.@(src_idx + 1);
+        dest.set(dest_idx, _b64_to_u8_table.@(b0.shift_right(2_U8).i64))
+            .set(dest_idx + 1, _b64_to_u8_table.@(b0.shift_left(4_U8).bit_or(b1.shift_right(4_U8)).i64))
+            .set(dest_idx + 2, _b64_to_u8_table.@(b1.shift_left(2_U8).i64))
+            .set(dest_idx + 3, '=')
+    };
+    dest.StringEx::from_array
 );
 
 // Decodes a string which contains BASE64 characters to a byte array.
 // Characters other than BASE64 are ignored.
 base64_decode: String -> Array U8;
 base64_decode = |str| (
-    let src = str.to_iter.map(|u8| _u8_to_b64_table.@(u8.i64))
-                .filter(|b64| b64 != 0xFF_U8).to_array;
-    let src_size = src.@size;
-    let dest_size = src_size * 3 / 4;
-    let dest = Array::fill(dest_size, 0_U8);
-    let dest = loop(
-        (dest, 0, 0), |(dest, src_idx, dest_idx)|
-        if src_idx + 1 >= src_size { break $ dest };
-        let b0 = src.@(src_idx);
-        let b1 = src.@(src_idx + 1);
-        let dest = dest.set(dest_idx, b0.shift_left(2_U8).bit_or(b1.shift_right(4_U8)));
-        if src_idx + 2 >= src_size { break $ dest };
-        let b2 = src.@(src_idx + 2);
-        let dest = dest.set(dest_idx + 1, b1.bit_and(0x0F_U8).shift_left(4_U8).bit_or(b2.shift_right(2_U8)));
-        if src_idx + 3 >= src_size { break $ dest };
-        let b3 = src.@(src_idx + 3);
-        let dest = dest.set(dest_idx + 2, b2.bit_and(0x03_U8).shift_left(6_U8).bit_or(b3));
-        continue $ (dest, src_idx + 4, dest_idx + 3)
+    let src = str.get_bytes;
+    let src_size = str.@size;
+    // Four six-bit pieces are three bytes, and a character standing for no piece only lowers the
+    // count of pieces, so the string holds at most this many bytes however many of them it carries.
+    let dest = Array::fill(src_size * 3 / 4, 0_U8);
+    // `acc` holds the `filled` pieces read since the last three bytes were written.
+    let (dest, dest_size, acc, filled) = loop(
+        (dest, 0, 0, 0, 0), |(dest, src_idx, dest_size, acc, filled)|
+        if src_idx == src_size { break $ (dest, dest_size, acc, filled) };
+        let piece = _u8_to_b64_table.@(src.@(src_idx).i64);
+        if piece == 0xFF_U8 { continue $ (dest, src_idx + 1, dest_size, acc, filled) };
+        let acc = acc.shift_left(6).bit_or(piece.i64);
+        if filled < 3 { continue $ (dest, src_idx + 1, dest_size, acc, filled + 1) };
+        let dest = dest.set(dest_size, acc.shift_right(16).u8)
+                        .set(dest_size + 1, acc.shift_right(8).bit_and(255).u8)
+                        .set(dest_size + 2, acc.bit_and(255).u8);
+        continue $ (dest, src_idx + 1, dest_size + 3, 0, 0)
     );
-    if dest_size != dest.@size { undefined("dest_size mismatch") };
-    dest
+    // The two or three pieces a last, padded group leaves, which are one or two whole bytes.
+    let (dest, dest_size) = if filled == 2 {
+        (dest.set(dest_size, acc.shift_right(4).u8), dest_size + 1)
+    } else if filled == 3 {
+        (dest.set(dest_size, acc.shift_right(10).u8)
+             .set(dest_size + 1, acc.shift_right(2).bit_and(255).u8), dest_size + 2)
+    } else {
+        (dest, dest_size)
+    };
+    dest.truncate(dest_size)
 );
 
-// [0..63] -> [0..255]
+// [0..63] -> [0..255]. A whole byte indexes the table, whose entries repeat every 64, so a six-bit
+// piece read out of a byte needs no masking.
 _b64_to_u8_table: Array U8;
 _b64_to_u8_table = (
-    Array::from_map(64, |i|
+    Array::from_map(256, |j|
+        let i = j.bit_and(63);
         if i < 26 { 'A' + i.u8 };
         if i < 52 { 'a' + (i - 26).u8 };
         if i < 62 { '0' + (i - 52).u8 };
