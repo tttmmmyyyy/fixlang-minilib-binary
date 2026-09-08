@@ -12,18 +12,16 @@ base64_encode = |src| (
     let groups = src_size / 3;
     // Every three bytes are four characters, each standing for six bits of them.
     let dest = loop(
-        (dest, 0), |(dest, group)|
-        if group == groups { break $ dest };
-        let src_idx = group * 3;
+        (dest, 0, 0), |(dest, src_idx, dest_idx)|
+        if src_idx + 3 > src_size { break $ dest };
         let b0 = src.@(src_idx);
         let b1 = src.@(src_idx + 1);
         let b2 = src.@(src_idx + 2);
-        let dest_idx = group * 4;
         let dest = dest.set(dest_idx, _b64_to_u8_table.@(b0.shift_right(2_U8).i64))
                         .set(dest_idx + 1, _b64_to_u8_table.@(b0.shift_left(4_U8).bit_or(b1.shift_right(4_U8)).i64))
                         .set(dest_idx + 2, _b64_to_u8_table.@(b1.shift_left(2_U8).bit_or(b2.shift_right(6_U8)).i64))
                         .set(dest_idx + 3, _b64_to_u8_table.@(b2.i64));
-        continue $ (dest, group + 1)
+        continue $ (dest, src_idx + 3, dest_idx + 4)
     );
     // A last group of one or two bytes, which the padding character fills out to four characters.
     let src_idx = groups * 3;
