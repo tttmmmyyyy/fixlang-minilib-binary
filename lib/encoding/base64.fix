@@ -1,4 +1,14 @@
 // BASE64 encoding and decoding
+//
+// Two words run through this module.
+//
+// A *piece* is the six bits that one BASE64 character stands for. `_u8_to_b64_table` reads a
+// character into a piece, and `_b64_to_u8_table` writes a piece back as a character.
+//
+// A *group* is the unit the conversion works in: twenty-four bits, which are three bytes on one
+// side and four pieces -- four characters -- on the other. A byte array whose length is not a
+// multiple of three ends in a group of one or two bytes, which the padding character `=` fills out
+// to four characters; a string may likewise end in a group of two or three pieces.
 module Minilib.Encoding.Base64;
 
 import Minilib.Text.Hex;
