@@ -27,10 +27,12 @@ base64_encode = |src| (
         let b0 = src.@(src_idx);
         let b1 = src.@(src_idx + 1);
         let b2 = src.@(src_idx + 2);
-        let dest = dest.set(dest_idx, _b64_to_u8_table.@(b0.shift_right(2_U8).i64))
-                        .set(dest_idx + 1, _b64_to_u8_table.@(b0.shift_left(4_U8).bit_or(b1.shift_right(4_U8)).bit_and(63_U8).i64))
-                        .set(dest_idx + 2, _b64_to_u8_table.@(b1.shift_left(2_U8).bit_or(b2.shift_right(6_U8)).bit_and(63_U8).i64))
-                        .set(dest_idx + 3, _b64_to_u8_table.@(b2.bit_and(63_U8).i64));
+        let u0 = _b64_to_u8_table.@(b0.shift_right(2_U8).i64);
+        let u1 = _b64_to_u8_table.@(b0.shift_left(4_U8).bit_or(b1.shift_right(4_U8)).bit_and(63_U8).i64);
+        let u2 = _b64_to_u8_table.@(b1.shift_left(2_U8).bit_or(b2.shift_right(6_U8)).bit_and(63_U8).i64);
+        let u3 = _b64_to_u8_table.@(b2.bit_and(63_U8).i64);
+        let dest = dest.set(dest_idx, u0).set(dest_idx + 1, u1)
+                        .set(dest_idx + 2, u2).set(dest_idx + 3, u3);
         continue $ (dest, src_idx + 3, dest_idx + 4)
     );
     // A last group of one or two bytes, which the padding character fills out to four characters.
@@ -40,17 +42,19 @@ base64_encode = |src| (
     let dest = if rest == 0 { dest }
     else if rest == 1 {
         let b0 = src.@(src_idx);
-        dest.set(dest_idx, _b64_to_u8_table.@(b0.shift_right(2_U8).i64))
-            .set(dest_idx + 1, _b64_to_u8_table.@(b0.shift_left(4_U8).bit_and(63_U8).i64))
-            .set(dest_idx + 2, '=')
-            .set(dest_idx + 3, '=')
+        let u0 = _b64_to_u8_table.@(b0.shift_right(2_U8).i64);
+        let u1 = _b64_to_u8_table.@(b0.shift_left(4_U8).bit_and(63_U8).i64);
+        dest.set(dest_idx, u0).set(dest_idx + 1, u1)
+            .set(dest_idx + 2, '=').set(dest_idx + 3, '=')
     } else {
+        // rest == 2
         let b0 = src.@(src_idx);
         let b1 = src.@(src_idx + 1);
-        dest.set(dest_idx, _b64_to_u8_table.@(b0.shift_right(2_U8).i64))
-            .set(dest_idx + 1, _b64_to_u8_table.@(b0.shift_left(4_U8).bit_or(b1.shift_right(4_U8)).bit_and(63_U8).i64))
-            .set(dest_idx + 2, _b64_to_u8_table.@(b1.shift_left(2_U8).bit_and(63_U8).i64))
-            .set(dest_idx + 3, '=')
+        let u0 = _b64_to_u8_table.@(b0.shift_right(2_U8).i64);
+        let u1 = _b64_to_u8_table.@(b0.shift_left(4_U8).bit_or(b1.shift_right(4_U8)).bit_and(63_U8).i64);
+        let u2 = _b64_to_u8_table.@(b1.shift_left(2_U8).bit_and(63_U8).i64);
+        dest.set(dest_idx, u0).set(dest_idx + 1, u1)
+            .set(dest_idx + 2, u2).set(dest_idx + 3, '=')
     };
     dest.StringEx::from_array
 );
