@@ -1,6 +1,6 @@
 // BASE64 encoding and decoding
 //
-// Two words run through this module.
+// Three words run through this module.
 //
 // A *piece* is the six bits that one BASE64 character stands for. `_u8_to_b64_table` reads a
 // character into a piece, and `_b64_to_u8_table` writes a piece back as a character.
@@ -9,6 +9,10 @@
 // side and four pieces -- four characters -- on the other. A byte array whose length is not a
 // multiple of three ends in a group of one or two bytes, which the padding character `=` fills out
 // to four characters; a string may likewise end in a group of two or three pieces.
+//
+// A group of characters is *whole* when each of its four characters stands for a piece. That is
+// where a reading is three bytes at once; elsewhere it goes one character at a time, since a
+// character standing for no piece is passed over and the pieces around it close up.
 module Minilib.Encoding.Base64;
 
 import Minilib.Text.Hex;
@@ -71,10 +75,9 @@ base64_decode = |str| (
     // `acc` holds the `filled` pieces read since the last three bytes were written.
     let (dest, dest_idx, acc, filled) = loop(
         (0, dest, 0, 0, 0), |(src_idx, dest, dest_idx, acc, filled)|
-        // A group of four characters that all stand for a piece is three whole bytes. The run of
-        // such groups is walked on its own, so that the walk carries the two indices and nothing
-        // else; it ends where a group is broken, which the reading below then takes one character
-        // at a time.
+        // The run of whole groups is walked on its own, so that the walk carries the two indices
+        // and nothing else. It ends at a group that is not whole, which the reading below then
+        // takes one character at a time.
         let (src_idx, dest, dest_idx) = if filled == 0 {
             _whole_groups(src, src_size, src_idx, dest, dest_idx)
         } else { (src_idx, dest, dest_idx) };
@@ -100,8 +103,7 @@ base64_decode = |str| (
     dest.truncate(dest_idx)
 );
 
-// Writes the bytes of every whole group of four characters that all stand for a piece, from
-// `src_idx` onwards.
+// Writes the bytes of every whole group from `src_idx` onwards.
 //
 // # Parameters
 // * `src` - The characters to read.
@@ -113,8 +115,7 @@ base64_decode = |str| (
 //
 // # Returns
 // Where the walk stopped: the character to read next, the bytes, and where the next byte goes. It
-// stops at the end of the string, or at the first group holding a character that stands for no
-// piece.
+// stops at the end of the string, or at the first group that is not whole.
 _whole_groups: Array U8 -> I64 -> I64 -> Array U8 -> I64 -> (I64, Array U8, I64);
 _whole_groups = |src, src_size, src_idx, dest, dest_idx| (
     loop((src_idx, dest, dest_idx), |(src_idx, dest, dest_idx)|
