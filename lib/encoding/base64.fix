@@ -101,7 +101,7 @@ base64_decode = |str| (
 );
 
 // Writes the bytes of every whole group of four characters that all stand for a piece, from
-// `src_idx` onwards, and answers with where the walk stopped in the characters and in the bytes.
+// `src_idx` onwards.
 //
 // # Parameters
 // * `src` - The characters to read.
@@ -110,6 +110,11 @@ base64_decode = |str| (
 // * `src_idx` - The character to read from.
 // * `dest` - The bytes written so far.
 // * `dest_idx` - Where the next byte goes.
+//
+// # Returns
+// Where the walk stopped: the character to read next, the bytes, and where the next byte goes. It
+// stops at the end of the string, or at the first group holding a character that stands for no
+// piece.
 _whole_groups: Array U8 -> I64 -> I64 -> Array U8 -> I64 -> (I64, Array U8, I64);
 _whole_groups = |src, src_size, src_idx, dest, dest_idx| (
     loop((src_idx, dest, dest_idx), |(src_idx, dest, dest_idx)|
